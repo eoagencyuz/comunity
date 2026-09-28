@@ -3,12 +3,12 @@ import asyncio
 from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-import google.generativeai as genai
+from groq import Groq
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GEMINI_KEY = os.getenv("GEMINI_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-genai.configure(api_key=GEMINI_KEY)
+client = Groq(api_key=GROQ_API_KEY)
 
 try:
     with open("knowledge.txt", "r", encoding="utf-8") as f:
@@ -18,17 +18,12 @@ except Exception:
 
 system_instruction = f"""
 Sen aqlli va xushmuomala yordamchi AI agentsan.
-Mijozlarga quyidagi ma'lumotlar bazasi asosida aniq va lo'nda javob ber:
+Mijozlarga faqat quyidagi ma'lumotlar bazasi asosida aniq va lo'nda javob ber:
 {knowledge_base}
 
 QAT'IY QOIDA: Agar berilgan savolga ushbu bazada javob bo'lmasa, to'qima ma'lumot aytma.
 "Ushbu masala bo'yicha mutaxassisimiz siz bilan bog'lanadi" deb javob ber.
 """
-
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=system_instruction
-)
 
 app = FastAPI()
 tg_app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -39,8 +34,15 @@ async def start_command(update: Update, context):
 async def handle_message(update: Update, context):
     user_text = update.message.text
     try:
-        response = model.generate_content(user_text)
-        reply = response.text
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_text}
+            ],
+            temperature=0.3
+        )
+        reply = completion.choices[0].message.content
     except Exception:
         reply = "Kechirasiz, tizimda qisqa uzilish bo'ldi. Birozdan so'ng qayta urinib ko'ring."
     
